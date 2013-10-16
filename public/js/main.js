@@ -4,7 +4,7 @@ var dl;
 
   function DeviceLocations() {
 
-    this.tileLayerURL = 'http://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+    this.tileLayerURL = 'http://mapattack-tiles-0.pdx.esri.com/dark/{z}/{y}/{x}';
     this.apiUrl = 'https://geotrigger.arcgis.com/device/locations';
     $('#apiUrl').val(this.apiUrl);
 
@@ -16,37 +16,25 @@ var dl;
 
     this.createLayers();
 
-    this.locationsMapper = new LocationsMapper(this);
-    this.triggersMapper = new TriggersMapper(this);
-
-  };
+    this.locationsMapper = new LocationsMapper(this, 0);
+  }
 
   DeviceLocations.prototype.createLayers = function() {
     this.createLocationsLayer();
-    this.createTriggersLayer();
   };
 
   DeviceLocations.prototype.createLocationsLayer = function() {
     if (this.locLayer != null) { this.map.removeLayer(this.locLayer); }
     this.locLayer = L.geoJson(null, {
-      onEachFeature: function(feature, layer) {
-        if (feature.properties && feature.properties.popup) {
-          layer.bindPopup(feature.properties.popup);
-        }
+      style: {
+        color: "#4978F3"
       }
     }).addTo(this.map);
-  };
+    this.markerLayer = L.geoJson(null, {
+        style: {
 
-  DeviceLocations.prototype.createTriggersLayer = function() {
-    if (this.triLayer != null) { this.map.removeLayer(this.triLayer); }
-    this.triLayer = L.geoJson(null, {
-      style: { color: "#ff7800" },
-      onEachFeature: function(feature, layer) {
-        if (feature.properties && feature.properties.popup) {
-          layer.bindPopup(feature.properties.popup);
         }
-      }
-    }).addTo(this.map);
+    })
   };
 
   DeviceLocations.prototype.get = function() {
@@ -96,8 +84,6 @@ var dl;
     $('#response').val(JSON.stringify(r, null, 2));
 
     if (!r.error) {
-      this.triggersMapper.triggers = r.triggers;
-      this.triggersMapper.show();
       this.locationsMapper.setLocations(r.locations);
       this.locationsMapper.show();
 
@@ -126,33 +112,48 @@ var dl;
   };
 
   LocationsMapper.prototype.show = function() {
-    if (this._locations.length > 0) {
+    var coordinates = [];
+    while (this._locations.length > 0) {
       var l = this._locations.pop();
-      this.dl.locLayer.addData(l);
-      setTimeout($.proxy(function(){ this.show(); }, this), this.timeout);
+        console.log(l);
+        var xmin = Infinity;
+        var xmax = -Infinity;
+        var ymin = Infinity;
+        var ymax = -Infinity;
+
+        for (var i = 0; i < l.geometry.coordinates[0].length; i++) {
+            var c = l.geometry.coordinates[0][i];
+            var x = c[1];
+            var y = c[0]
+            if (y > ymax) ymax = y;
+            if (y < ymin) ymin = y;
+            if (x > xmax) xmax = x;
+            if (x < xmin) xmin = x;
+        }
+
+        var x = ((xmax - xmin) / 2) + xmin;
+        var y = ((ymax - ymin) / 2) + ymin;
+
+        coordinates.push([y, x]);
+
+//      setTimeout($.proxy(function(){ this.show(); }, this), this.timeout);
     }
+
+    var feature = {
+        type: "Feature",
+        geometry: {
+            type: "LineString",
+            coordinates: coordinates
+        }
+    }
+
+    this.dl.locLayer.addData(feature);
   };
 
   LocationsMapper.prototype.resetLocations = function(timeout) {
     this.setLocations(this.locations);
     this.timeout = timeout || 25;
   };
-
-  // ---
-
-  function TriggersMapper(dl) {
-    this.triggers = [];
-    this.dl = dl;
-  };
-
-  TriggersMapper.prototype.show = function() {
-    var self = this;
-    $(this.triggers).each(function(i,e) {
-      self.dl.triLayer.addData(e.geojson);
-    });
-  };
-
-  // ---
   
   function getParameterByName(name) {
     name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
